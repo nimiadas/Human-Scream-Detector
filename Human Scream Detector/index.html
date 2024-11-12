@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scream Detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+        }
+        #result {
+            margin-top: 20px;
+            font-size: 1.2em;
+            color: #333;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 1em;
+            margin: 10px;
+            cursor: pointer;
+        }
+        input[type="file"] {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Scream Detection</h1>
+    <button id="recordAudioBtn">Record Audio</button>
+    <button onclick="document.getElementById('fileInput').click();">Load Audio from Device</button>
+    <input type="file" id="fileInput" accept="audio/*" onchange="fileSelected(this.files[0])">
+    
+    <button id="predictBtn" style="display:none;">Predict</button>
+    
+    <div id="result"></div>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let audioBlob;
+        let selectedFile;
+
+        // Handle recording audio
+        document.getElementById("recordAudioBtn").addEventListener("click", async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+
+                mediaRecorder.onstop = () => {
+                    audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    audioChunks = [];
+                    sendAudio(audioBlob);
+                };
+
+                mediaRecorder.start();
+                setTimeout(() => {
+                    mediaRecorder.stop();
+                }, 5000);  // Record for 5 seconds
+
+                document.getElementById("result").textContent = "Recording audio...";
+            } catch (error) {
+                console.error("Microphone access denied or error:", error);
+            }
+        });
+
+        // Function to handle file selection
+        function fileSelected(file) {
+            selectedFile = file;
+            document.getElementById("predictBtn").style.display = "inline-block"; // Show the predict button
+            document.getElementById("result").textContent = "File selected: " + file.name;
+        }
+
+        // Function to send recorded audio to the server
+        function sendAudio(audioBlob) {
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'audio.wav');
+
+            fetch('/predict', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById("result").textContent = data.result;  // Update to reflect server's result
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById("result").textContent = "Error processing audio.";
+            });
+        }
+
+        // Function to upload audio from device when predict button is clicked
+        document.getElementById("predictBtn").addEventListener("click", () => {
+            if (selectedFile) {
+                const formData = new FormData();
+                formData.append('file', selectedFile);
+
+                fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById("result").textContent = data.result;  // Update to reflect server's result
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    document.getElementById("result").textContent = "Error processing audio.";
+                });
+            } else {
+                document.getElementById("result").textContent = "Please select a file first.";
+            }
+        });
+    </script>
+
+</body>
+</html>
